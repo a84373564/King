@@ -58,7 +58,6 @@ def generate_module(base_mod, generation_index, symbols, stage="L1", boost=False
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
 
-        # 血統標記與行為記錄
         "score": base_mod.get("score", 0),
         "sharpe": base_mod.get("sharpe", 0),
         "win_rate": base_mod.get("win_rate", 0),
@@ -123,6 +122,21 @@ def main():
 
     if not base_pool_L1 and not base_pool_L2 and not base_pool_L3:
         print("[v4] 無有效來源，補 fallback 模組")
+        base_pool_L1.append({
+            "id": "fallback_X1",
+            "symbol": "BTCUSDT",
+            "strategy_type": "A",
+            "parameters": {
+                "ma_fast": 10,
+                "ma_slow": 30,
+                "sl_pct": 1.5,
+                "tp_pct": 3.0
+            }
+        })
+
+    # 補強保底 pool_L1（修正 IndexError）
+    if not base_pool_L1:
+        print("[v4] 無 base_pool_L1，有可能 v5 未產生有效模組，使用 fallback")
         base_pool_L1.append({
             "id": "fallback_X1",
             "symbol": "BTCUSDT",
