@@ -1,28 +1,45 @@
+# -*- coding: utf-8 -*-
 import json
 from datetime import datetime
 from pathlib import Path
 
-# === 固定幣池設定 ===
+# === 固定戰鬥幣種 ===
 FIXED_SYMBOLS = ["MATICUSDT", "OPUSDT"]
-OUTPUT_LIMIT = 2  # 強制輸出這兩個幣
+OUTPUT_PATH = Path("~/Killcore/v2_candidates.json").expanduser()
+LOG_PATH = Path("~/Killcore/v2_rank_log.json").expanduser()
 
-def save_symbol_pool(symbols, output_path="~/Killcore/symbol_pool.json"):
-    path = Path(output_path).expanduser()
+ENABLE_LOGGING = True
+
+def save_fixed_candidates():
     data = {
         "generated_at": datetime.now().isoformat(),
-        "symbols": symbols,
-        "limit": len(symbols),
-        "filter": {
-            "mode": "fixed_pair",
-            "symbols": symbols
-        },
-        "system_version": "Killcore-v∞",
-        "schema_version": "v2.1-lock"
+        "symbols": FIXED_SYMBOLS
     }
-    with path.open("w") as f:
+    with OUTPUT_PATH.open("w") as f:
         json.dump(data, f, indent=2)
-    print(f"[v2.1-lock] 幣池產出成功：{symbols}")
+    print(f"[v2-lock] 成功選出幣種：{data['symbols']}")
+
+def log_selection():
+    if not ENABLE_LOGGING:
+        return
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "source": "fixed",
+        "symbols": FIXED_SYMBOLS
+    }
+    if LOG_PATH.exists():
+        with LOG_PATH.open("r") as f:
+            logs = json.load(f)
+    else:
+        logs = []
+    logs.append(log_entry)
+    with LOG_PATH.open("w") as f:
+        json.dump(logs, f, indent=2)
+    print("[v2-log] 固定幣種已記錄入 log")
+
+def main():
+    save_fixed_candidates()
+    log_selection()
 
 if __name__ == "__main__":
-    print("[v2.1-lock] 啟動固定雙幣輸出器")
-    save_symbol_pool(FIXED_SYMBOLS[:OUTPUT_LIMIT])
+    main()
