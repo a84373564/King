@@ -13,6 +13,7 @@ ENABLE_PERFORMANCE_INTEGRATOR = True
 ENABLE_STRATEGY_COMPATIBILITY_MAP = True
 ENABLE_SYMBOL_CREDIBILITY_SCORER = True
 ENABLE_PREDICTIVE_SIMULATOR = True
+ENABLE_SELECTED_SYMBOL_EXPORT = True  # ← 為 v4 加的
 
 # === 檔案路徑 ===
 SYMBOL_POOL_PATH = Path("~/Killcore/symbol_pool.json").expanduser()
@@ -20,6 +21,7 @@ SYMBOL_LOG_PATH = Path("~/Killcore/v3_symbol_log.json").expanduser()
 LINEAGE_PATH = Path("~/Killcore/v3_lineage.json").expanduser()
 STRATEGY_MAP_PATH = Path("~/Killcore/v3_strategy_map.json").expanduser()
 CREDIBILITY_PATH = Path("~/Killcore/v3_credibility.json").expanduser()
+V4_SELECTED_SYMBOL_PATH = Path("/root/Killcore/v3_selected_symbols.json")
 
 # === 策略建議邏輯（精準版）===
 def recommend_strategies(symbol):
@@ -116,7 +118,7 @@ def process_symbol_pool():
             })
 
     if ENABLE_SYMBOL_MEMORY:
-        log_symbol_history(pool["generated_at"], result)
+        log_symbol_history(pool.get("generated_at", datetime.now().isoformat()), result)
 
     if ENABLE_MODULE_LINEAGE:
         build_lineage(symbols)
@@ -130,11 +132,19 @@ def process_symbol_pool():
     if ENABLE_PREDICTIVE_SIMULATOR:
         simulate_predictive_difficulty(symbols)
 
+    if ENABLE_SELECTED_SYMBOL_EXPORT:
+        try:
+            with V4_SELECTED_SYMBOL_PATH.open("w") as f:
+                json.dump(symbols, f, indent=2)
+            print(f"[v3-L2] 幣種已輸出供 v4 使用：{symbols}")
+        except Exception as e:
+            print(f"[v3-L2] 幣種輸出失敗：{e}")
+
     return result
 
 # === 執行入口 ===
 if __name__ == "__main__":
-    print("[v3] 啟動 Killcore v3 中樞（固定雙幣強化邏輯）")
+    print("[v3] 啟動 Killcore v3 中樞（分層邏輯 + 全開功能）")
     assignments = process_symbol_pool()
     for a in assignments:
         print(f"{a['symbol']} → 策略 {a['strategy_type']} × {a['module_count']} 模組")
