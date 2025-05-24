@@ -50,6 +50,8 @@ def generate_module(base_mod, generation_id, symbols, stage="L1", boost=False):
         "bloodline": base_mod.get("bloodline", []) + [base_mod.get("id")],
         "mutate_stage": stage,
         "mutate_boost": boost,
+        "ancestor_god_id": base_mod.get("id") if base_mod.get("is_divine") else None,
+        "vengeance_mode": base_mod.get("resurrected", False),
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat()
     }
@@ -66,7 +68,7 @@ def save_module(mod):
         json.dump(mod, f, indent=2)
 
 def main():
-    print("[v4] 啟動模組生成（神格進化模式）")
+    print("[v4] 啟動模組生成（神血＋復仇強化版）")
     king_pool = load_json_list(KING_PATH)
     previous_modules = load_json_list(PREVIOUS_PATH)
     symbols = load_symbols()
@@ -77,6 +79,7 @@ def main():
 
     for mod in king_pool:
         weight = 1 + mod.get("king_rounds", 1)
+        mod["is_divine"] = mod.get("is_divine", False)
         base_pool_L3.extend([mod] * weight)
 
     for mod in previous_modules:
@@ -112,7 +115,8 @@ def main():
     new_modules = []
     for i in range(300):
         parent = random.choice(base_pool_L1)
-        mod = generate_module(parent, i + 1, symbols, stage="L1")
+        boost = parent.get("resurrected", False)
+        mod = generate_module(parent, i + 1, symbols, stage="L1", boost=boost)
         save_module(mod)
         new_modules.append(mod)
 
@@ -130,7 +134,7 @@ def main():
         save_module(mod)
         new_modules.append(mod)
 
-    print(f"[v4] 已產生模組總數：{len(new_modules)}")
+    print(f"[v4] 完成模組生成數量：{len(new_modules)}")
 
 if __name__ == "__main__":
     main()
