@@ -1,131 +1,140 @@
+# -*- coding: utf-8 -*-
+
 import os
 import json
 import random
-from datetime import datetime
 from pathlib import Path
 
 MODULE_PATH = Path("~/Killcore/v4_modules").expanduser()
-KING_PATH = Path("~/Killcore/king_pool.json").expanduser()
 RESULT_PATH = Path("~/Killcore/v5_result.json").expanduser()
+KING_PATH = Path("~/Killcore/king_pool.json").expanduser()
 GODLINE_PATH = Path("~/Killcore/godline.json").expanduser()
 
-MARKET_SCENARIOS = ["high_volatility", "low_volatility", "trend_up", "range_chop"]
+modules = []
+for file in MODULE_PATH.glob("*.json"):
+    with open(file) as f:
+        mod = json.load(f)
 
-def simulate_module(mod):
-    scenario = random.choice(MARKET_SCENARIOS)
-    params = mod["parameters"]
-    strategy = mod["strategy_type"]
+        mod.setdefault("return_pct", 0.0)
+        mod.setdefault("sharpe", 0.0)
+        mod.setdefault("win_rate", 0.0)
+        mod.setdefault("drawdown", 0.0)
+        mod.setdefault("entry_price", 1000.0)
+        mod.setdefault("exit_price", 1000.0)
 
-    base_return = {
-        "A": random.uniform(1.0, 4.0),
-        "B": random.uniform(0.5, 3.5),
-        "C": random.uniform(0.8, 2.8)
-    }[strategy]
+        mod.setdefault("slippage_pct", round(random.uniform(-0.003, 0.003), 4))
+        mod.setdefault("tx_fee_pct", 0.001)
+        mod.setdefault("entry_delay_sec", random.randint(1, 3))
 
-    if mod.get("is_king", False):
-        base_return += 0.3
-        mod["king_rounds"] = mod.get("king_rounds", 1) + 1
+        mod.setdefault("type", "未知")
+        mod.setdefault("fail_count", 0)
+        mod.setdefault("fail_reason", "")
+        mod.setdefault("verified_env", "default")
+        mod.setdefault("resurrected", False)
+        mod.setdefault("is_divine", False)
+        mod.setdefault("divine_rounds", 0)
+
+        slip = mod["slippage_pct"]
+        fee = mod["tx_fee_pct"]
+        ep = mod["entry_price"]
+        xp = mod["exit_price"]
+
+        entry_adj = ep * (1 + slip)
+        exit_adj = xp * (1 - slip)
+        net_profit = (exit_adj - entry_adj) - (entry_adj + exit_adj) * fee
+        return_pct_adj = round((net_profit / entry_adj) * 100, 2) if entry_adj != 0 else 0
+
+        mod["net_profit"] = round(net_profit, 2)
+        mod["adjusted_return_pct"] = return_pct_adj
+
+        modules.append(mod)
+
+for mod in modules:
+    score = round(mod["adjusted_return_pct"] * 0.5 + mod["sharpe"] * 10 + mod["win_rate"] * 0.3 - mod["drawdown"] * 5, 2)
+    mod["score"] = score
+
+modules = sorted(modules, key=lambda x: x["score"], reverse=True)
+for i, mod in enumerate(modules):
+    mod["score_rank"] = i + 1
+    mod["is_king"] = (i == 0)
+    mod["eliminated"] = (i != 0)
+
+top_king = modules[0]
+top_king["king_rounds"] = top_king.get("king_rounds", 0) + 1
+top_king["has_divine_protection"] = True
+
+prev_divine_id = None
+if GODLINE_PATH.exists():
+    with open(GODLINE_PATH) as f:
+        godline = json.load(f)
+        if godline and godline[-1].get("is_divine"):
+            prev_divine_id = godline[-1]["id"]
+
+if prev_divine_id and prev_divine_id != top_king["id"]:
+    for mod in modules:
+        if mod["id"] == prev_divine_id:
+            mod.pop("is_divine", None)
+            mod.pop("divine_title", None)
+            mod["was_god"] = True
+            mod["eliminated"] = True
+
+top_king["is_divine"] = True
+top_king["divine_title"] = f"True God #{top_king['king_rounds']}"
+top_king["divine_rounds"] = top_king.get("divine_rounds", 0) + 1
+top_king["eliminated"] = False
+
+if prev_divine_id and prev_divine_id != top_king["id"]:
+    for mod in modules:
+        if mod["id"] != prev_divine_id and mod["score_rank"] == 1:
+            mod["is_godslayer"] = True
+            mod["slain_god_id"] = prev_divine_id
+
+# 額外爆倉與分類邏輯補充
+for mod in modules:
+    if mod["drawdown"] > 25 or mod["net_profit"] < -100:
+        mod["type"] = "爆倉型"
+        mod["fail_reason"] = "過度虧損"
+    elif mod["sharpe"] < 0.5:
+        mod["fail_reason"] = "風險控制不足"
+    elif mod["adjusted_return_pct"] < 0:
+        mod["fail_reason"] = "實際報酬為負"
     else:
-        mod["king_rounds"] = 0
+        mod["type"] = "穩定型"
 
-    drawdown = random.uniform(0.8, 3.5)
-    if mod.get("is_king"):
-        drawdown *= 0.95
+    if mod.get("fail_count", 0) > 2:
+        mod["score"] -= 5
+        mod["fail_reason"] += " | 重測過多"
 
-    win_rate = random.uniform(50, 80)
-    trade_count = random.randint(8, 20)
+# 多神共存免死邏輯
+for mod in modules:
+    if mod.get("is_divine") and mod.get("king_rounds", 0) > 1:
+        mod["has_divine_protection"] = True
+        mod["eliminated"] = False
 
-    mod["return_pct"] = base_return
-    mod["drawdown"] = drawdown
-    mod["win_rate"] = win_rate
-    mod["trade_count"] = trade_count
-    mod["sharpe"] = round(base_return / drawdown, 2)
+for mod in modules:
+    if not mod.get("is_divine") and not mod.get("is_king"):
+        mod["eliminated"] = True
 
-    score = (
-        base_return * 1.5
-        - drawdown * 1.2
-        + mod["sharpe"] * 2
-        + win_rate * 0.2
-    )
-    mod["score"] = round(score, 2)
+with RESULT_PATH.open("w") as f:
+    json.dump(modules, f, indent=2)
 
-    mod["score_history"] = mod.get("score_history", [])
-    mod["score_history"].append(mod["score"])
-    last_scores = mod["score_history"][-3:]
-    mod["score_rolling_avg"] = round(sum(last_scores) / len(last_scores), 2)
+with KING_PATH.open("w") as f:
+    json.dump([top_king], f, indent=2)
 
-    mod["final_score"] = round(0.7 * mod["score"] + 0.3 * mod["score_rolling_avg"], 2)
+godline_all = []
+if GODLINE_PATH.exists():
+    with open(GODLINE_PATH) as f:
+        godline_all = json.load(f)
+godline_all.append(top_king)
+with GODLINE_PATH.open("w") as f:
+    json.dump(godline_all[-20:], f, indent=2)
 
-    return mod
+print(f"[v5] 王者誕生：{top_king['id']}（Score: {top_king['score']}）")
+if top_king.get("is_divine"):
+    print(f"[v5] 真神再臨：{top_king['divine_title']}（神戰輪數 {top_king['divine_rounds']}）")
+if top_king.get("king_rounds", 0) > 1:
+    print(f"[v5] 王者連任：{top_king['king_rounds']} 輪")
 
-def load_modules():
-    return [json.load(open(p)) for p in MODULE_PATH.glob("*.json")]
-
-def load_king_id():
-    if KING_PATH.exists():
-        with open(KING_PATH) as f:
-            king_pool = json.load(f)
-            if king_pool:
-                return king_pool[0]["id"]
-    return None
-
-def write_result(modules):
-    with open(RESULT_PATH, "w") as f:
-        json.dump(modules, f, indent=2)
-
-def write_king(mod):
-    with open(KING_PATH, "w") as f:
-        json.dump([mod], f, indent=2)
-
-def update_godline(new_king):
-    if not GODLINE_PATH.exists():
-        godline = []
-    else:
-        with open(GODLINE_PATH) as f:
-            godline = json.load(f)
-
-    last_entry = godline[-1] if godline else None
-    bloodline = last_entry["bloodline"][:] if last_entry else []
-    bloodline.append(new_king["id"])
-
-    entry = {
-        "id": new_king["id"],
-        "slayer_of": new_king.get("slayer_of"),
-        "king_rounds": new_king.get("king_rounds", 1),
-        "bloodline": bloodline,
-        "title": "god_candidate",
-        "has_fallen": False
-    }
-
-    godline.append(entry)
-
-    with open(GODLINE_PATH, "w") as f:
-        json.dump(godline, f, indent=2)
-
-def main():
-    modules = load_modules()
-    previous_king_id = load_king_id()
-
-    verified = [simulate_module(mod) for mod in modules]
-    verified.sort(key=lambda m: m["final_score"], reverse=True)
-
-    new_king = verified[0]
-    new_king["is_king"] = True
-    new_king["resurrected"] = False
-    new_king["has_divine_protection"] = True
-    new_king["from_resurrection"] = False
-    new_king["eliminated"] = False
-
-    if previous_king_id and new_king["id"] != previous_king_id:
-        new_king["slayer_of"] = previous_king_id
-
-    for m in verified[1:]:
-        m["is_king"] = False
-        m["eliminated"] = True
-
-    write_result(verified)
-    write_king(new_king)
-    update_godline(new_king)
-
-if __name__ == "__main__":
-    main()
+for mod in modules:
+    if mod.get("is_godslayer"):
+        print(f"[v5] 弒神者登場：{mod['id']}（弒：{mod['slain_god_id']}）")
