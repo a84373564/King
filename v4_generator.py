@@ -3,6 +3,7 @@
 import os
 import json
 import random
+import string
 from datetime import datetime
 from pathlib import Path
 
@@ -34,9 +35,11 @@ def mutate_parameters(params, mutation_boost=False):
             new_params[k] = v
     return new_params
 
-def generate_module(base_mod, generation_id, symbols, stage="L1", boost=False):
-    new_id = f"{base_mod['id'].split('-')[0]}-{generation_id}"
-    return {
+def generate_module(base_mod, generation_index, symbols, stage="L1", boost=False):
+    id_prefix = chr(97 + (generation_index // 50) % 26)  # a-z
+    new_id = f"{id_prefix}-{generation_index}"
+
+    mod = {
         "id": new_id,
         "symbol": random.choice(symbols),
         "strategy_type": base_mod["strategy_type"],
@@ -53,8 +56,31 @@ def generate_module(base_mod, generation_id, symbols, stage="L1", boost=False):
         "ancestor_god_id": base_mod.get("id") if base_mod.get("is_divine") else None,
         "vengeance_mode": base_mod.get("resurrected", False),
         "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
+        "updated_at": datetime.now().isoformat(),
+
+        # 血統標記與行為記錄
+        "score": base_mod.get("score", 0),
+        "sharpe": base_mod.get("sharpe", 0),
+        "win_rate": base_mod.get("win_rate", 0),
+        "drawdown": base_mod.get("drawdown", 0),
+        "type": base_mod.get("type", "未知"),
+        "fail_reason": base_mod.get("fail_reason", ""),
+        "fail_count": base_mod.get("fail_count", 0),
+        "verified_env": base_mod.get("verified_env", "default"),
+        "is_divine": base_mod.get("is_divine", False),
+        "divine_rounds": base_mod.get("divine_rounds", 0)
     }
+
+    if mod["is_divine"]:
+        mod["blood_mark"] = "godline"
+    elif mod["vengeance_mode"]:
+        mod["blood_mark"] = "vengeance"
+    elif mod["type"] == "爆倉型":
+        mod["blood_mark"] = "unstable"
+    else:
+        mod["blood_mark"] = "neutral"
+
+    return mod
 
 def load_json_list(path):
     if path.exists():
@@ -68,7 +94,7 @@ def save_module(mod):
         json.dump(mod, f, indent=2)
 
 def main():
-    print("[v4] 啟動模組生成（神血＋復仇強化版）")
+    print("[v4] 啟動模組生成（最終完全版）")
     king_pool = load_json_list(KING_PATH)
     previous_modules = load_json_list(PREVIOUS_PATH)
     symbols = load_symbols()
@@ -92,7 +118,7 @@ def main():
             base_pool_L1.append(mod)
         elif score > 85 or gen >= 3:
             base_pool_L2.append(mod)
-        else:
+        elif mod.get("type") != "爆倉型":
             base_pool_L1.append(mod)
 
     if not base_pool_L1 and not base_pool_L2 and not base_pool_L3:
