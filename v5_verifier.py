@@ -7,143 +7,125 @@ from pathlib import Path
 MODULE_PATH = Path("~/Killcore/v4_modules").expanduser()
 KING_PATH = Path("~/Killcore/king_pool.json").expanduser()
 RESULT_PATH = Path("~/Killcore/v5_result.json").expanduser()
+GODLINE_PATH = Path("~/Killcore/godline.json").expanduser()
 
-# === 模擬市場場型 ===
 MARKET_SCENARIOS = ["high_volatility", "low_volatility", "trend_up", "range_chop"]
 
-# === 模擬引擎（隨機市場 + 策略參數判定） ===
 def simulate_module(mod):
     scenario = random.choice(MARKET_SCENARIOS)
     params = mod["parameters"]
     strategy = mod["strategy_type"]
 
-    # 基礎模擬參數（可對應實際策略架構）
     base_return = {
         "A": random.uniform(1.0, 4.0),
         "B": random.uniform(0.5, 3.5),
         "C": random.uniform(0.8, 2.8)
     }[strategy]
 
+    if mod.get("is_king", False):
+        base_return += 0.3
+        mod["king_rounds"] = mod.get("king_rounds", 1) + 1
+    else:
+        mod["king_rounds"] = 0
+
     drawdown = random.uniform(0.8, 3.5)
+    if mod.get("is_king"):
+        drawdown *= 0.95
+
     win_rate = random.uniform(50, 80)
     trade_count = random.randint(8, 20)
 
-    # 場型對報酬修正
-    if scenario == "trend_up" and strategy == "A":
-        base_return += 1.5
-    elif scenario == "low_volatility" and strategy == "C":
-        base_return -= 1.0
+    mod["return_pct"] = base_return
+    mod["drawdown"] = drawdown
+    mod["win_rate"] = win_rate
+    mod["trade_count"] = trade_count
+    mod["sharpe"] = round(base_return / drawdown, 2)
 
-    # 模擬成本參數
-    fee_rate = 0.001  # 單邊手續費 0.1%
-    slippage = 0.002  # 假設滑價 0.2%
+    score = (
+        base_return * 1.5
+        - drawdown * 1.2
+        + mod["sharpe"] * 2
+        + win_rate * 0.2
+    )
+    mod["score"] = round(score, 2)
 
-    gross_return = base_return
-    fee_cost = fee_rate * trade_count * gross_return
-    slippage_cost = slippage * gross_return
-    net_return = gross_return - fee_cost - slippage_cost
+    mod["score_history"] = mod.get("score_history", [])
+    mod["score_history"].append(mod["score"])
+    last_scores = mod["score_history"][-3:]
+    mod["score_rolling_avg"] = round(sum(last_scores) / len(last_scores), 2)
 
-    sharpe = round(net_return / drawdown, 2)
-    profit_before_fee = round(gross_return, 2)
-    fee_paid = round(fee_cost, 2)
-    slippage_impact = round(slippage_cost, 2)
-    return_pct = round(net_return, 2)
-    score = round(return_pct * 0.5 + sharpe * 10 + win_rate * 0.3 - drawdown * 5, 2)
-
-    # 模組類型判定
-    if drawdown > 3.0:
-        behavior = "爆倉型"
-    elif return_pct < 1.0:
-        behavior = "慢熱型"
-    else:
-        behavior = "穩定型"
-
-    fail_reason = []
-    if return_pct < 1.0:
-        fail_reason.append("未觸 TP")
-    if drawdown > 3.0:
-        fail_reason.append("止損過大")
-    if sharpe < 0.5:
-        fail_reason.append("風險報酬比過低")
-
-    mod.update({
-        "return_pct": return_pct,
-        "profit_before_fee": profit_before_fee,
-        "fee_paid": fee_paid,
-        "slippage_impact": slippage_impact,
-        "drawdown": drawdown,
-        "sharpe": sharpe,
-        "win_rate": round(win_rate, 2),
-        "trade_count": trade_count,
-        "score": score,
-        "market_scenario": scenario,
-        "strategy_behavior": behavior,
-        "fail_reasons": fail_reason,
-        "validated": True,
-        "updated_at": datetime.now().isoformat()
-    })
+    mod["final_score"] = round(0.7 * mod["score"] + 0.3 * mod["score_rolling_avg"], 2)
 
     return mod
 
-# === 模組結果處理 + 王者決選 ===
-def evaluate_modules():
-    if not MODULE_PATH.exists():
-        print("[v5] 找不到模組資料夾，請先執行 v4")
-        return []
+def load_modules():
+    return [json.load(open(p)) for p in MODULE_PATH.glob("*.json")]
 
-    all_mods = []
-    for file in MODULE_PATH.glob("*.json"):
-        with file.open() as f:
-            mod = json.load(f)
-            mod = simulate_module(mod)
-            all_mods.append(mod)
+def load_king_id():
+    if KING_PATH.exists():
+        with open(KING_PATH) as f:
+            king_pool = json.load(f)
+            if king_pool:
+                return king_pool[0]["id"]
+    return None
 
-    sorted_mods = sorted(all_mods, key=lambda x: x["score"], reverse=True)
-    for rank, mod in enumerate(sorted_mods, start=1):
-        mod["score_rank"] = rank
-        mod["is_king"] = (rank == 1)
-        mod["eliminated"] = (rank > 1)
+def write_result(modules):
+    with open(RESULT_PATH, "w") as f:
+        json.dump(modules, f, indent=2)
 
-    for mod in sorted_mods:
-        mod_path = MODULE_PATH / f"{mod['id']}.json"
-        with mod_path.open("w") as f:
-            json.dump(mod, f, indent=2)
+def write_king(mod):
+    with open(KING_PATH, "w") as f:
+        json.dump([mod], f, indent=2)
 
-    top_king = sorted_mods[0]
-    top_king["king_rounds"] = top_king.get("king_rounds", 0) + 1
-    top_king["has_divine_protection"] = True
+def update_godline(new_king):
+    if not GODLINE_PATH.exists():
+        godline = []
+    else:
+        with open(GODLINE_PATH) as f:
+            godline = json.load(f)
 
-    with KING_PATH.open("w") as f:
-        json.dump([top_king], f, indent=2)
+    last_entry = godline[-1] if godline else None
+    bloodline = last_entry["bloodline"][:] if last_entry else []
+    bloodline.append(new_king["id"])
 
-    print(f"[v5] 王者誕生：{top_king['id']}（Score: {top_king['score']}）")
-    return sorted_mods
-
-# === 輸出模擬報表 ===
-def write_result_report(mods):
-    behavior_map = {}
-    strategy_score = {}
-    for mod in mods:
-        b = mod["strategy_behavior"]
-        behavior_map[b] = behavior_map.get(b, 0) + 1
-        s = mod["strategy_type"]
-        strategy_score[s] = strategy_score.get(s, []) + [mod["score"]]
-
-    strategy_avg = {k: round(sum(v)/len(v), 2) for k, v in strategy_score.items()}
-    report = {
-        "timestamp": datetime.now().isoformat(),
-        "total_modules": len(mods),
-        "average_score": round(sum(m["score"] for m in mods) / len(mods), 2),
-        "behavior_distribution": behavior_map,
-        "average_score_per_strategy": strategy_avg
+    entry = {
+        "id": new_king["id"],
+        "slayer_of": new_king.get("slayer_of"),
+        "king_rounds": new_king.get("king_rounds", 1),
+        "bloodline": bloodline,
+        "title": "god_candidate",
+        "has_fallen": False
     }
 
-    with RESULT_PATH.open("w") as f:
-        json.dump(report, f, indent=2)
-    print(f"[v5] 報表已輸出：{RESULT_PATH.name}")
+    godline.append(entry)
 
-# === 主流程入口 ===
+    with open(GODLINE_PATH, "w") as f:
+        json.dump(godline, f, indent=2)
+
+def main():
+    modules = load_modules()
+    previous_king_id = load_king_id()
+
+    verified = [simulate_module(mod) for mod in modules]
+    verified.sort(key=lambda m: m["final_score"], reverse=True)
+
+    new_king = verified[0]
+    new_king["is_king"] = True
+    new_king["resurrected"] = False
+    new_king["has_divine_protection"] = True
+    new_king["from_resurrection"] = False
+    new_king["eliminated"] = False
+
+    if previous_king_id and new_king["id"] != previous_king_id:
+        new_king["slayer_of"] = previous_king_id
+
+    for m in verified[1:]:
+        m["is_king"] = False
+        m["eliminated"] = True
+
+    write_result(verified)
+    write_king(new_king)
+    update_godline(new_king)
+
 if __name__ == "__main__":
-    print("[v5] 啟動 Killcore 模擬驗證場")
-    mods = evaluate_modules()
-    write_result_report(mods)
+    main()
