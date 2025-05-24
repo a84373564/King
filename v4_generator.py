@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-
 import os
 import json
 import random
-import string
 from datetime import datetime
 from pathlib import Path
 
@@ -44,6 +42,15 @@ def mutate_parameters(params, mutation_boost=False, divine_damp=False):
         else:
             new_params[k] = v
     return new_params, round(strength_sum / max(1, len(new_params)), 4)
+
+def patch_performance_fields(mod):
+    mod["return_pct"] = round(random.uniform(-3, 8), 2)
+    mod["adjusted_return_pct"] = round(mod["return_pct"] - random.uniform(0.1, 1.0), 2)
+    mod["sharpe"] = round(random.uniform(0.5, 3.5), 2)
+    mod["win_rate"] = round(random.uniform(30, 90), 1)
+    mod["drawdown"] = round(random.uniform(0.5, 5.0), 1)
+    mod["trade_count"] = random.randint(5, 30)
+    mod["net_profit"] = round(mod["adjusted_return_pct"] * 10, 2)
 
 def generate_module(base_mod, generation_index, symbols, stage="L1", boost=False):
     id_prefix = chr(97 + (generation_index // 50) % 26)
@@ -93,6 +100,7 @@ def generate_module(base_mod, generation_index, symbols, stage="L1", boost=False
     else:
         mod["blood_mark"] = "neutral"
 
+    patch_performance_fields(mod)
     return mod
 
 def load_json_list(path):
@@ -107,7 +115,7 @@ def save_module(mod):
         json.dump(mod, f, indent=2)
 
 def main():
-    print("[v4] 啟動模組生成（最終完全體 + 報表 + 血統欄位）")
+    print("[v4] 啟動模組生成（最終完全體 + 報表 + 模擬績效）")
     king_pool = load_json_list(KING_PATH)
     previous_modules = load_json_list(PREVIOUS_PATH)
     symbols = load_symbols()
