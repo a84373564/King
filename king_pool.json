@@ -1,0 +1,29 @@
+[
+  {
+    "id": "pet_ETH_A-93",
+    "symbol": "ETHUSDT",
+    "strategy_type": "A",
+    "parameters": { "ma_fast": 20, "ma_slow": 50, "sl_pct": 2, "tp_pct": 5 },
+    "entry_price": 2488.5,
+    "exit_price": 2522.7,
+    "profit": 34.2,
+    "return_pct": 1.37,
+    "drawdown": 1.2,
+    "sharpe": 1.86,
+    "win_rate": 68.4,
+    "trade_count": 10,
+    "score": 87.42,
+    "score_rank": 4,
+    "is_king": true,
+    "king_rounds": 2,
+    "resurrected": false,
+    "from_resurrection": false,
+    "resurrection_chance": 0.5,
+    "has_divine_protection": true,
+    "eliminated": false,
+    "created_at": "2025-05-23T16:40:00",
+    "updated_at": "2025-05-23T17:11:00",
+    "system_version": "Killcore-v∞",
+    "schema_version": "v2.0"
+  }
+]
