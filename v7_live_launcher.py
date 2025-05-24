@@ -5,25 +5,29 @@ from datetime import datetime
 KING_PATH = Path("~/Killcore/king_pool.json").expanduser()
 
 def format_percent(v):
-    return f"{v:.1f}%" if isinstance(v, (float, int)) else "-"
+    return f"{v:.2f}%" if isinstance(v, (float, int)) else "-"
 
 def show_king_report(king):
     print("\n=== Killcore 王者戰鬥簡報 ===\n")
 
-    print(f"王者編號     : {king.get('id')}")
-    print(f"幣種         : {king.get('symbol')}")
-    print(f"策略類型     : {king.get('strategy_type')}（策略 {strategy_label(king.get('strategy_type'))}）")
+    print(f"王者編號     : {king.get('id', '-')}")
+    print(f"幣種         : {king.get('symbol', '-')}")
+    print(f"策略類型     : {king.get('strategy_type', '-')}"
+          f"（策略 {strategy_label(king.get('strategy_type'))}）")
     print(f"策略風格     : {king.get('strategy_behavior', '未知')}")
-    print(f"模組分數     : {king.get('score')}")
-    print(f"報酬率       : +{format_percent(king.get('return_pct'))}")
+    print(f"模組分數     : {king.get('score', '-')}")
+    print(f"調整後報酬率 : +{format_percent(king.get('adjusted_return_pct'))}")
     print(f"最大回撤     : {format_percent(king.get('drawdown'))}")
-    print(f"Sharpe       : {king.get('sharpe')}")
+    print(f"Sharpe       : {king.get('sharpe', '-')}")
     print(f"勝率         : {format_percent(king.get('win_rate'))}")
-    print(f"交易次數     : {king.get('trade_count')}")
+    print(f"交易次數     : {king.get('trade_count', '未知')}")
+    print(f"淨利潤       : {king.get('net_profit', '未知')}")
     print()
 
     print(f"重生者？     : {'是' if king.get('from_resurrection') else '否'}")
-    print(f"血統來源     : {king.get('parent_id', '未知')}（第 {king.get('mutate_generation', '?')} 代）")
+    parent_id = king.get('parent_id', '未知')
+    generation = king.get('mutate_generation', '?')
+    print(f"血統來源     : {parent_id}（第 {generation} 代）")
     print(f"神聖保護？   : {'是' if king.get('has_divine_protection') else '否'}")
     print(f"王者連任次數 : {king.get('king_rounds', 1)} 輪")
     print()
@@ -33,8 +37,8 @@ def show_king_report(king):
         print(f"  - {k:<8}: {v}")
     print()
 
-    print(f"模組建立時間 : {king.get('created_at')}")
-    print(f"最近更新時間 : {king.get('updated_at')}")
+    print(f"模組建立時間 : {king.get('created_at', '-')}")
+    print(f"最近更新時間 : {king.get('updated_at', '-')}")
     print()
 
     print("本輪總戰力摘要：")
